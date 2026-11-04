@@ -7,8 +7,8 @@ plugins {
 
 android {
     namespace = "io.github.nikitakarpei.attestedwebcapture"
-    compileSdk = 36
-    buildToolsVersion = "36.0.0" // pinned for reproducibility
+    compileSdk = 37
+    buildToolsVersion = "37.0.0" // pinned for reproducibility
 
     defaultConfig {
         applicationId = "io.github.nikitakarpei.attestedwebcapture"

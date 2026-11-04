@@ -6,7 +6,7 @@ description: Installs pinned Android SDK packages and sets ANDROID_HOME and ANDR
 inputs:
   packages:
     description: SDK packages, separated by spaces
-    default: "platforms;android-36 build-tools;36.0.0"
+    default: "platforms;android-37.0 build-tools;37.0.0"
   cache:
     description: Restore and save the SDK with actions/cache
     default: "true"
