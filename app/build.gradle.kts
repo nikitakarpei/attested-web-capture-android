@@ -7,8 +7,8 @@ plugins {
 
 android {
     namespace = "io.github.nikitakarpei.attestedwebcapture"
-    compileSdk = 36
-    buildToolsVersion = "36.0.0" // pinned for reproducibility
+    compileSdk = 37
+    buildToolsVersion = "37.0.0" // pinned for reproducibility
 
     defaultConfig {
         applicationId = "io.github.nikitakarpei.attestedwebcapture"
@@ -164,7 +164,7 @@ kover {
 }
 
 dependencies {
-    implementation("com.squareup.okhttp3:okhttp:5.4.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.86")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20260814") // Android has it built in
