@@ -15,8 +15,8 @@ Before a pull request, run what CI runs:
 
 New behaviour needs tests; a new refusal needs a test that fails without it. A change to what a capture contains
 needs the predicate type's specification changed with it. A new or updated dependency needs
-`gradle/verification-metadata.xml` regenerated (`./gradlew --write-verification-metadata sha256 help`), and a reason
-in the pull request: the app keeps few on purpose.
+`gradle/verification-metadata.xml` written again (`make verification-metadata`; on Dependabot's pull requests a
+workflow does it), and a reason in the pull request: the app keeps few on purpose.
 
 **Releases**: a maintainer raises `versionCode` and `versionName`, adds `## <version> (<date>)` to the changelog,
 pushes the tag `v<version>`, and approves the release job.

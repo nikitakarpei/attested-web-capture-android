@@ -1,0 +1,61 @@
+# The Android SDK, from Google's pinned command-line tools (checked by SHA-256), cached between runs. Release builds
+# pass cache: false, so nothing restored from a cache reaches a release.
+name: Android SDK
+description: Installs pinned Android SDK packages and sets ANDROID_HOME and ANDROID_SDK_ROOT.
+
+inputs:
+  packages:
+    description: SDK packages, separated by spaces
+    default: "platforms;android-36 build-tools;36.0.0"
+  cache:
+    description: Restore and save the SDK with actions/cache
+    default: "true"
+  tools-url:
+    description: Google's command-line tools
+    default: https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
+  tools-sha256:
+    description: Their SHA-256
+    default: 0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8
+
+runs:
+  using: composite
+  steps:
+    - name: Cache key
+      id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        SHA256: ${{ inputs.tools-sha256 }}
+      run: echo "key=android-sdk-$SHA256-$(printf '%s' "$PACKAGES" | tr -c 'A-Za-z0-9.-' '_')" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the SDK
+      id: cache
+      if: inputs.cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/android-sdk
+        key: ${{ steps.key.outputs.key }}
+
+    - name: Install the SDK
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        URL: ${{ inputs.tools-url }}
+        SHA256: ${{ inputs.tools-sha256 }}
+      run: |
+        sdk="$RUNNER_TEMP/android-sdk"
+        rm -rf "$sdk" && mkdir -p "$sdk/cmdline-tools"
+        curl -sSfL -o "$RUNNER_TEMP/cmdline-tools.zip" "$URL"
+        echo "$SHA256  $RUNNER_TEMP/cmdline-tools.zip" | sha256sum -c -
+        unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$sdk/cmdline-tools"
+        mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
+        # Not a pipe: this step runs with pipefail, and yes fails once sdkmanager stops reading.
+        "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses < <(yes) > /dev/null
+        read -ra packages <<< "$PACKAGES"
+        "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" "${packages[@]}" > /dev/null
+
+    # The runner image also sets ANDROID_SDK_ROOT, to its own SDK; Gradle refuses to build if the two differ.
+    - name: Use it
+      shell: bash
+      run: printf "ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n" "$RUNNER_TEMP/android-sdk" "$RUNNER_TEMP/android-sdk" >> "$GITHUB_ENV"

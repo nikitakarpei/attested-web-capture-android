@@ -113,7 +113,7 @@ holds the signed APK, the unsigned APK it was made from, checksums and a build-p
 
 ## Build from source
 
-Needs JDK 21 and the Android SDK (platform 36, build-tools 35.0.0).
+Needs JDK 21 and the Android SDK (platform 36, build-tools 36.0.0).
 
 ```
 ./gradlew assembleRelease                        # app/build/outputs/apk/release/app-release-unsigned.apk
