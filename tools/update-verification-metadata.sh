@@ -16,8 +16,11 @@ home=${GRADLE_USER_HOME:-$HOME/.gradle}
 mkdir -p "$tmp/gradle/wrapper"
 [ -d "$home/wrapper/dists" ] && cp -r "$home/wrapper/dists" "$tmp/gradle/wrapper/"
 
-if ! GRADLE_USER_HOME="$tmp/gradle" ./gradlew --write-verification-metadata sha256 --rerun-tasks --console=plain \
-    assembleRelease lintRelease ktlintCheck testReleaseUnitTest koverVerifyRelease fuzzRequest -PfuzzSeconds=5; then
+# The fuzzer runs on its own, as in CI: after the other tasks in one Gradle run, it starts out near libFuzzer's
+# memory limit. Both runs add to the same file, from the same empty cache.
+gradle() { GRADLE_USER_HOME="$tmp/gradle" ./gradlew --write-verification-metadata sha256 --rerun-tasks --console=plain "$@"; }
+if ! { gradle assembleRelease lintRelease ktlintCheck testReleaseUnitTest koverVerifyRelease &&
+    gradle fuzzRequest -PfuzzSeconds=5; }; then
     cp "$tmp/before.xml" "$file"
     echo "The build failed: $file is unchanged." >&2
     exit 1
