@@ -52,7 +52,8 @@ jobs:
           mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
           yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses > /dev/null
           "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" "platforms;android-36" "build-tools;35.0.0" > /dev/null
-          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          # The runner image also sets ANDROID_SDK_ROOT, to its own SDK; Gradle refuses to build if the two differ.
+          printf "ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n" "$sdk" "$sdk" >> "$GITHUB_ENV"
 
       - name: Install the fake attestation's Python dependency (tests only)
         run: |
