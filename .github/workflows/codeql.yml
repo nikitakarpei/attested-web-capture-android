@@ -1,0 +1,62 @@
+# Static analysis for security issues. Results: Security → Code scanning; pull requests fail on new alerts.
+
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"   # weekly, to pick up new queries
+
+permissions:
+  contents: read
+
+env:
+  CMDLINE_TOOLS_URL: https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
+  CMDLINE_TOOLS_SHA256: 0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      security-events: write   # upload the results
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Install the Android SDK (pinned command-line tools; platform 36, build-tools 35.0.0)
+        run: |
+          sdk="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$sdk/cmdline-tools"
+          curl -sSfL -o "$RUNNER_TEMP/cmdline-tools.zip" "$CMDLINE_TOOLS_URL"
+          echo "$CMDLINE_TOOLS_SHA256  $RUNNER_TEMP/cmdline-tools.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$sdk/cmdline-tools"
+          mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
+          yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses > /dev/null
+          "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" "platforms;android-36" "build-tools;35.0.0" > /dev/null
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+
+      - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: java-kotlin
+          build-mode: manual         # Kotlin is analyzed by watching the compiler
+          queries: security-extended
+
+      - name: Compile (app and tests)
+        run: ./gradlew compileReleaseKotlin compileReleaseUnitTestKotlin --rerun-tasks --console=plain
+
+      - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2

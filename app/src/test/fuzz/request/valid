@@ -1,0 +1,6 @@
+GET http://example.com/ HTTP/1.1
+Host: example.com
+Proxy-Authorization: Basic OjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVm
+User-Agent: curl/8.5.0
+Accept: */*
+

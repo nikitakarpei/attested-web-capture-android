@@ -1,0 +1,5 @@
+GET / HTTP/1.1
+Host: x
+Proxy-Authorization: Basic OjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVm
+User-Agent: x
+

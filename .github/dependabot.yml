@@ -1,0 +1,17 @@
+# Weekly update pull requests for the app's Gradle dependencies, the pinned Actions, and the tools CI installs.
+# Gradle updates also need gradle/verification-metadata.xml regenerated (./gradlew --write-verification-metadata
+# sha256 help), which Dependabot doesn't do: until then their CI fails.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /.github/commitlint
+    schedule:
+      interval: weekly
