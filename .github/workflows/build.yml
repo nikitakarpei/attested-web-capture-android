@@ -158,14 +158,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Install apksigner (build-tools 36.0.0; not from a cache)
+      - name: Install apksigner (build-tools 37.0.0; not from a cache)
         uses: ./.github/actions/android-sdk
         with:
-          packages: build-tools;36.0.0
+          packages: build-tools;37.0.0
           cache: false
 
       - name: Use apksigner
-        run: echo "APKSIGNER=$ANDROID_HOME/build-tools/36.0.0/apksigner" >> "$GITHUB_ENV"
+        run: echo "APKSIGNER=$ANDROID_HOME/build-tools/37.0.0/apksigner" >> "$GITHUB_ENV"
 
       # Passwords go through environment variables, never the command line.
       - name: Sign
