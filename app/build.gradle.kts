@@ -167,5 +167,5 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.86")
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20250517") // Android has it built in
+    testImplementation("org.json:json:20260814") // Android has it built in
 }
