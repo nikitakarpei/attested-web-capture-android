@@ -217,7 +217,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          CERT: ${{ vars.SIGNING_CERT_SHA256 }}
         run: |
           gh release create "$TAG" dist/*.apk dist/SHA256SUMS dist/*.sigstore.json dist/LICENSE --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" --notes-file <(sed -nE "/^## ${TAG#v}( |\$)/,/^## /{/^## /!p}" CHANGELOG.md; echo; \
+              echo "Signing certificate SHA-256 (for signingCertificates): $CERT"; echo; \
               echo "Built by GitHub Actions from this tag. Check provenance with: gh attestation verify <file> --repo $GITHUB_REPOSITORY")

@@ -54,11 +54,11 @@ write a policy saying whose captures you trust, for example `policy.json`:
   "predicateTypes": {
     "https://github.com/nikitakarpei/hardware-attested-statements/blob/main/spec/predicates/http-response/v1.md": {
       "trustedSigners": [{ "profile": "android", "package": "io.github.nikitakarpei.attestedwebcapture",
-                           "signingCertificates": ["<release signing certificate SHA-256>"] }],
+                           "signingCertificates": ["094b0a3ccdd7a0d51717e2abcb9f0da5d4336d577b4cec5a52b33916117372a1"] }],
       "requireTimestamp": true, "requireStartedAfter": true } } }
 ```
 
-`signingCertificates` is the fingerprint published with the releases. Then:
+`signingCertificates` is the release signing certificate's SHA-256, which is also in each release's notes. Then:
 
 ```
 attested-verify -policy policy.json http example.http
