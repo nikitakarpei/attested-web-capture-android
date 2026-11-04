@@ -15,8 +15,6 @@ permissions:
   contents: read
 
 env:
-  CMDLINE_TOOLS_URL: https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
-  CMDLINE_TOOLS_SHA256: 0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8
   GRADLE_OPTS: -Dorg.gradle.daemon=false
   UNSIGNED_APK: app/build/outputs/apk/release/app-release-unsigned.apk
 
@@ -40,20 +38,13 @@ jobs:
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-provider: basic
+          cache-disabled: ${{ github.ref_type == 'tag' }}   # releases are built from nothing cached
           validate-wrappers: true
 
-      - name: Install the Android SDK (pinned command-line tools; platform 36, build-tools 35.0.0)
-        run: |
-          sdk="$RUNNER_TEMP/android-sdk"
-          mkdir -p "$sdk/cmdline-tools"
-          curl -sSfL -o "$RUNNER_TEMP/cmdline-tools.zip" "$CMDLINE_TOOLS_URL"
-          echo "$CMDLINE_TOOLS_SHA256  $RUNNER_TEMP/cmdline-tools.zip" | sha256sum -c -
-          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$sdk/cmdline-tools"
-          mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
-          yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses > /dev/null
-          "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" "platforms;android-36" "build-tools;35.0.0" > /dev/null
-          # The runner image also sets ANDROID_SDK_ROOT, to its own SDK; Gradle refuses to build if the two differ.
-          printf "ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n" "$sdk" "$sdk" >> "$GITHUB_ENV"
+      - name: Install the Android SDK (cached, except for releases)
+        uses: ./.github/actions/android-sdk
+        with:
+          cache: ${{ github.ref_type != 'tag' }}
 
       - name: Install the fake attestation's Python dependency (tests only)
         run: |
@@ -166,17 +157,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Install apksigner (pinned command-line tools; build-tools 35.0.0)
-        run: |
-          sdk="$RUNNER_TEMP/android-sdk"
-          mkdir -p "$sdk/cmdline-tools"
-          curl -sSfL -o "$RUNNER_TEMP/cmdline-tools.zip" "$CMDLINE_TOOLS_URL"
-          echo "$CMDLINE_TOOLS_SHA256  $RUNNER_TEMP/cmdline-tools.zip" | sha256sum -c -
-          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$sdk/cmdline-tools"
-          mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
-          yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses > /dev/null
-          "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" "build-tools;35.0.0" > /dev/null
-          echo "APKSIGNER=$sdk/build-tools/35.0.0/apksigner" >> "$GITHUB_ENV"
+      - name: Install apksigner (build-tools 36.0.0; not from a cache)
+        uses: ./.github/actions/android-sdk
+        with:
+          packages: build-tools;36.0.0
+          cache: false
+
+      - name: Use apksigner
+        run: echo "APKSIGNER=$ANDROID_HOME/build-tools/36.0.0/apksigner" >> "$GITHUB_ENV"
 
       # Passwords go through environment variables, never the command line.
       - name: Sign

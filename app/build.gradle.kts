@@ -2,14 +2,13 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlinx.kover") // test coverage
 }
 
 android {
     namespace = "io.github.nikitakarpei.attestedwebcapture"
     compileSdk = 36
-    buildToolsVersion = "35.0.0" // pinned for reproducibility
+    buildToolsVersion = "36.0.0" // pinned for reproducibility
 
     defaultConfig {
         applicationId = "io.github.nikitakarpei.attestedwebcapture"
@@ -18,6 +17,10 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
+
+    // The tests run against the release build: a debuggable build never creates a key. AGP only makes unit tests
+    // for the tested build type.
+    testBuildType = "release"
 
     buildTypes {
         release {
@@ -85,8 +88,8 @@ kotlin {
 tasks.matching { it.name.contains("ArtProfile") }.configureEach { enabled = false }
 
 // Tools, not part of the app; pinned in gradle/verification-metadata.xml like everything else.
-val ktlint: Configuration by configurations.creating
-val jazzer: Configuration by configurations.creating
+val ktlint = configurations.create("ktlint")
+val jazzer = configurations.create("jazzer")
 
 dependencies {
     ktlint("com.pinterest.ktlint:ktlint-cli:1.8.0") {

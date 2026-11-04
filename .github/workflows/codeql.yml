@@ -13,8 +13,6 @@ permissions:
   contents: read
 
 env:
-  CMDLINE_TOOLS_URL: https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
-  CMDLINE_TOOLS_SHA256: 0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8
   GRADLE_OPTS: -Dorg.gradle.daemon=false
 
 jobs:
@@ -38,18 +36,10 @@ jobs:
           cache-provider: basic
           validate-wrappers: true
 
-      - name: Install the Android SDK (pinned command-line tools; platform 36, build-tools 35.0.0)
-        run: |
-          sdk="$RUNNER_TEMP/android-sdk"
-          mkdir -p "$sdk/cmdline-tools"
-          curl -sSfL -o "$RUNNER_TEMP/cmdline-tools.zip" "$CMDLINE_TOOLS_URL"
-          echo "$CMDLINE_TOOLS_SHA256  $RUNNER_TEMP/cmdline-tools.zip" | sha256sum -c -
-          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$sdk/cmdline-tools"
-          mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
-          yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses > /dev/null
-          "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" "platforms;android-36" "build-tools;35.0.0" > /dev/null
-          # The runner image also sets ANDROID_SDK_ROOT, to its own SDK; Gradle refuses to build if the two differ.
-          printf "ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n" "$sdk" "$sdk" >> "$GITHUB_ENV"
+      - name: Install the Android SDK (cached, except for releases)
+        uses: ./.github/actions/android-sdk
+        with:
+          cache: ${{ github.ref_type != 'tag' }}
 
       - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
