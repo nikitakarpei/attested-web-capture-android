@@ -190,11 +190,13 @@ jobs:
         env:
           EXPECTED_CERT: ${{ vars.SIGNING_CERT_SHA256 }}
         run: |
-          out=$("$APKSIGNER" verify --print-certs "dist/attested-web-capture-$VERSION.apk")
+          out=$("$APKSIGNER" verify --verbose --print-certs "dist/attested-web-capture-$VERSION.apk")
           echo "$out"
           test -n "$EXPECTED_CERT"
-          echo "$out" | grep -qx "Signer #1 certificate SHA-256 digest: $EXPECTED_CERT"
-          test "$(echo "$out" | grep -c '^Signer #[0-9]* certificate DN:')" = 1   # exactly one signer
+          echo "$out" | grep -qx 'Number of signers: 1'
+          # The line's prefix depends on apksigner's version ("Signer #1", "V3.0 Signer"); the digest doesn't.
+          certs=$(echo "$out" | sed -nE 's/.*[Ss]igner.* certificate SHA-256 digest: ([0-9a-f]{64})$/\1/p' | sort -u)
+          test "$certs" = "$EXPECTED_CERT"
 
       - name: Checksums
         run: (cd dist && sha256sum ./*.apk > SHA256SUMS && cat SHA256SUMS)
