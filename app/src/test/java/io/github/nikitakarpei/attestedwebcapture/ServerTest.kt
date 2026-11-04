@@ -32,6 +32,7 @@ import kotlin.concurrent.thread
 class ServerTest {
     private val outDir = File(System.getProperty("e2e.dir")!!).apply { mkdirs() }
     private val tools = File(System.getProperty("tools.dir")!!)
+    private val python = System.getProperty("python").orEmpty().ifEmpty { error("python3 not found on PATH") }
 
     /** This build machine reaches the internet only through its own proxy; on a phone it's DIRECT. */
     private val client = httpClient(
@@ -42,7 +43,7 @@ class ServerTest {
 
     private fun fakeKey(): SigningKey {
         val p = ProcessBuilder(
-            "python3", File(tools, "test_fake_attestation.py").path,
+            python, File(tools, "test_fake_attestation.py").path,
             "--challenge", hex(KEY_CHALLENGE.toByteArray()), "--version-code", "1", "--data-file", "/dev/null", "--state-dir", outDir.path,
         )
             .redirectError(ProcessBuilder.Redirect.INHERIT).start()

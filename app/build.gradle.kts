@@ -64,6 +64,10 @@ android {
             it.systemProperty("e2e.dir", rootProject.file("build/e2e").absolutePath)
             it.systemProperty("tools.dir", rootProject.file("tools").absolutePath)
             it.inputs.dir(rootProject.file("tools")) // the tests run the fake attestation from there
+            // ...with the first python3 on PATH, by its absolute path ("" if there is none: then only the tests fail).
+            val path = System.getenv("PATH").orEmpty().split(File.pathSeparator)
+            val python = path.map { dir -> File(dir, "python3") }.firstOrNull { file -> file.canExecute() }
+            it.systemProperty("python", python?.absolutePath.orEmpty())
             it.systemProperty("fuzz.seeds", file("src/test/fuzz/request").absolutePath)
             it.testLogging { showStandardStreams = true }
         }
