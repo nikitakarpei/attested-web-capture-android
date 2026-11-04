@@ -105,7 +105,7 @@ jobs:
           go build -o "$RUNNER_TEMP/attested-verify" ./cmd/attested-verify
           for f in "$GITHUB_WORKSPACE"/build/e2e/example.http "$GITHUB_WORKSPACE"/build/e2e/redirect.http \
               "$GITHUB_WORKSPACE"/build/e2e/parallel-*.http; do
-            "$RUNNER_TEMP/attested-verify" -policy testdata/capture/policy.json \
+            "$RUNNER_TEMP/attested-verify" -policy "$GITHUB_WORKSPACE/tools/test_policy.json" \
               -test-only-root "$GITHUB_WORKSPACE/build/e2e/fake_root.pem" http "$f"
           done
 
