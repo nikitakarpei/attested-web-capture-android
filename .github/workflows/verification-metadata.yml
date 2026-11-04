@@ -1,0 +1,125 @@
+# Keeps gradle/verification-metadata.xml in step with Dependabot's Gradle updates, which don't change it
+# (dependabot-core#1996): on each push to a Dependabot Gradle branch, or when run on a branch by hand, it writes the
+# file again (tools/update-verification-metadata.sh) and commits it to the branch if it changed.
+# The job that runs the build can only read; the job that can write runs no code from the branch. The commit is made
+# through GitHub's API, so GitHub signs it; commits made with GITHUB_TOKEN start no workflows, so this one starts the
+# checks on it.
+
+name: verification-metadata
+
+on:
+  push:
+    branches: ["dependabot/gradle/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verification-metadata-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # No cache: the script needs an empty Gradle cache anyway.
+      - name: Check the Gradle wrapper
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-disabled: true
+          validate-wrappers: true
+
+      - name: Install the Android SDK (cached, except for releases)
+        uses: ./.github/actions/android-sdk
+        with:
+          cache: ${{ github.ref_type != 'tag' }}
+
+      - name: Install the fake attestation's Python dependency (tests only)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet "cryptography>=42"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+
+      - name: Write the verification metadata again
+        run: tools/update-verification-metadata.sh
+
+      - name: Compare
+        id: diff
+        run: |
+          if git diff --quiet -- gradle/verification-metadata.xml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- gradle/verification-metadata.xml
+          fi
+
+      - if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verification-metadata
+          path: gradle/verification-metadata.xml
+          if-no-files-found: error
+          retention-days: 1
+
+  commit:
+    needs: regenerate
+    if: needs.regenerate.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write   # commit to the branch
+      actions: write    # start the checks on the new commit
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: verification-metadata
+          path: ${{ runner.temp }}/new
+
+      # Only onto the commit the file was made from: if the branch moved meanwhile, its own run commits instead.
+      - name: Commit the file, signed by GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          jq -n --rawfile contents "$RUNNER_TEMP/new/verification-metadata.xml" \
+            --arg repo "$REPO" --arg branch "$BRANCH" --arg head "$HEAD_SHA" '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: { input: {
+                branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                expectedHeadOid: $head,
+                message: {
+                  headline: "build(deps): update Gradle'"'"'s verification metadata",
+                  body: "Written again by the verification-metadata workflow (tools/update-verification-metadata.sh).\n\nSigned-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+                },
+                fileChanges: { additions: [{ path: "gradle/verification-metadata.xml", contents: ($contents | @base64) }] }
+              } }
+            }' > "$RUNNER_TEMP/commit.json"
+          gh api graphql --input "$RUNNER_TEMP/commit.json" --jq '.data.createCommitOnBranch.commit.oid'
+
+      - name: Start the checks on the new commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          for workflow in build.yml codeql.yml commits.yml; do
+            gh workflow run "$workflow" --repo "$REPO" --ref "$BRANCH"
+          done

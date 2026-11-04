@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:   # started on a branch by the verification-metadata workflow
   schedule:
     - cron: "17 3 * * 1"   # weekly, to pick up new queries
 

@@ -6,6 +6,7 @@ name: commits
 
 on:
   pull_request:
+  workflow_dispatch:   # started on a branch by the verification-metadata workflow
   push:
     branches: [main]
 
@@ -40,6 +41,8 @@ jobs:
           lint() { .github/commitlint/node_modules/.bin/commitlint --config .github/commitlint/commitlint.config.mjs; }
           if [ "$EVENT" = pull_request ]; then
             range="$BASE..$HEAD"
+          elif [ "$EVENT" = workflow_dispatch ]; then
+            range="$AFTER^!"            # the commit it was started on
           elif [ "$BEFORE" = 0000000000000000000000000000000000000000 ]; then
             range="$AFTER"              # a new branch: all of it
           else
