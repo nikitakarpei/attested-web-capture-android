@@ -1,0 +1,11 @@
+# Code style: the Kotlin coding conventions (https://kotlinlang.org/docs/coding-conventions.html), checked by
+# ktlint in its "intellij_idea" style (the conventions as IntelliJ applies them). Run: ./gradlew ktlintCheck
+# (ktlintFormat fixes most findings).
+root = true
+
+[*.{kt,kts}]
+indent_style = space
+indent_size = 4
+max_line_length = 140
+insert_final_newline = true
+ktlint_code_style = intellij_idea

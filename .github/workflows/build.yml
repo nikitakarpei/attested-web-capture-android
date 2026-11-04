@@ -1,0 +1,234 @@
+# Every push and pull request: build, check, test and fuzz the app, check its captures with the verifier, and
+# check the build is reproducible. A v* tag also signs the APK and publishes a release with it.
+# Only the release job's Sign step sees the signing key.
+# Everything is pinned (actions by commit); untrusted values reach scripts only through environment variables.
+
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CMDLINE_TOOLS_URL: https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
+  CMDLINE_TOOLS_SHA256: 0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+  UNSIGNED_APK: app/build/outputs/apk/release/app-release-unsigned.apk
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # Caches dependencies against Maven Central's rate limits; written only from main, and still checked
+      # against gradle/verification-metadata.xml.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Install the Android SDK (pinned command-line tools; platform 36, build-tools 35.0.0)
+        run: |
+          sdk="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$sdk/cmdline-tools"
+          curl -sSfL -o "$RUNNER_TEMP/cmdline-tools.zip" "$CMDLINE_TOOLS_URL"
+          echo "$CMDLINE_TOOLS_SHA256  $RUNNER_TEMP/cmdline-tools.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$sdk/cmdline-tools"
+          mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
+          yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses > /dev/null
+          "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" "platforms;android-36" "build-tools;35.0.0" > /dev/null
+          # The runner image also sets ANDROID_SDK_ROOT, to its own SDK; Gradle refuses to build if the two differ.
+          printf "ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n" "$sdk" "$sdk" >> "$GITHUB_ENV"
+
+      - name: Install the fake attestation's Python dependency (tests only)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet "cryptography>=42"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build, lint, check code style, test, check coverage
+        run: ./gradlew assembleRelease lintRelease ktlintCheck testReleaseUnitTest koverVerifyRelease --console=plain
+
+      - name: Fuzz the request parser (60 s)
+        run: ./gradlew fuzzRequest -PfuzzSeconds=60 --console=plain
+
+      - name: Keep the input that crashed the fuzzer
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-crash
+          path: app/build/fuzz/crash-*
+          if-no-files-found: ignore
+
+      # The captures the tests made (signed with the tests' fake attestation root), for the verifier's own tests.
+      - name: Keep the tests' captures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: captures
+          path: build/e2e/
+          if-no-files-found: ignore
+
+      # The verifier is in its own repository, checked out at a pinned commit: repository variables
+      # VERIFIER_REPOSITORY (owner/name) and VERIFIER_REF (a full commit hash).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ vars.VERIFIER_REPOSITORY }}
+          ref: ${{ vars.VERIFIER_REF }}
+          path: verifier-src
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: verifier-src/verifier/go.mod
+          cache-dependency-path: verifier-src/verifier/go.sum
+
+      # With the live revocation and GrapheneOS lists, and the tests' fake attestation root.
+      - name: Verify the captures the tests produced
+        working-directory: verifier-src/verifier
+        run: |
+          go build -o "$RUNNER_TEMP/attested-verify" ./cmd/attested-verify
+          for f in "$GITHUB_WORKSPACE"/build/e2e/example.http "$GITHUB_WORKSPACE"/build/e2e/redirect.http \
+              "$GITHUB_WORKSPACE"/build/e2e/parallel-*.http; do
+            "$RUNNER_TEMP/attested-verify" -policy "$GITHUB_WORKSPACE/tools/test_policy.json" \
+              -test-only-root "$GITHUB_WORKSPACE/build/e2e/fake_root.pem" http "$f"
+          done
+
+      - name: Check the build is reproducible (second clean build in another directory)
+        run: |
+          copy="$RUNNER_TEMP/second-build"
+          git clone --quiet --no-hardlinks . "$copy"
+          (cd "$copy" && ./gradlew assembleRelease --console=plain --quiet --no-build-cache)
+          first=$(sha256sum "$UNSIGNED_APK" | cut -d' ' -f1)
+          second=$(sha256sum "$copy/$UNSIGNED_APK" | cut -d' ' -f1)
+          echo "first build:  $first"
+          echo "second build: $second"
+          test "$first" = "$second"
+
+      - name: Collect the unsigned APK
+        run: |
+          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+          mkdir dist
+          cp "$UNSIGNED_APK" "dist/attested-web-capture-$version-unsigned.apk"
+          sha256sum dist/*.apk
+          echo "$version" > dist/VERSION
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apk
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release    # holds the signing key (see README)
+    permissions:
+      contents: write       # create the release
+      id-token: write       # sign the provenance attestations (Sigstore)
+      attestations: write   # store them
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: apk
+          path: dist
+
+      - name: Check the tag matches the app's version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "v$(cat dist/VERSION)" = "$TAG"
+          echo "VERSION=$(cat dist/VERSION)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install apksigner (pinned command-line tools; build-tools 35.0.0)
+        run: |
+          sdk="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$sdk/cmdline-tools"
+          curl -sSfL -o "$RUNNER_TEMP/cmdline-tools.zip" "$CMDLINE_TOOLS_URL"
+          echo "$CMDLINE_TOOLS_SHA256  $RUNNER_TEMP/cmdline-tools.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$sdk/cmdline-tools"
+          mv "$sdk/cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/latest"
+          yes | "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --licenses > /dev/null
+          "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" "build-tools;35.0.0" > /dev/null
+          echo "APKSIGNER=$sdk/build-tools/35.0.0/apksigner" >> "$GITHUB_ENV"
+
+      # Passwords go through environment variables, never the command line.
+      - name: Sign
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          umask 077
+          keystore="$RUNNER_TEMP/release.jks"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$keystore"
+          # v3 allows rotating to a new key later; v1 (JAR) would add files, and Android 9+ doesn't need it.
+          "$APKSIGNER" sign --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:STORE_PASSWORD --key-pass env:KEY_PASSWORD \
+            --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false \
+            --out "dist/attested-web-capture-$VERSION.apk" "dist/attested-web-capture-$VERSION-unsigned.apk"
+
+      # Fails if the secrets hold a different key than the published SIGNING_CERT_SHA256.
+      - name: Check the signature and the signing certificate
+        env:
+          EXPECTED_CERT: ${{ vars.SIGNING_CERT_SHA256 }}
+        run: |
+          out=$("$APKSIGNER" verify --print-certs "dist/attested-web-capture-$VERSION.apk")
+          echo "$out"
+          test -n "$EXPECTED_CERT"
+          echo "$out" | grep -qx "Signer #1 certificate SHA-256 digest: $EXPECTED_CERT"
+          test "$(echo "$out" | grep -c '^Signer #[0-9]* certificate DN:')" = 1   # exactly one signer
+
+      - name: Checksums
+        run: (cd dist && sha256sum ./*.apk > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Attest build provenance
+        id: provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.apk
+
+      # The attestation also goes in the release, so it can be checked without GitHub's API.
+      - name: Collect the attestation and the license
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE" "dist/attested-web-capture-$VERSION.sigstore.json"
+          cp LICENSE dist/LICENSE
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/*.apk dist/SHA256SUMS dist/*.sigstore.json dist/LICENSE --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" --notes-file <(sed -nE "/^## ${TAG#v}( |\$)/,/^## /{/^## /!p}" CHANGELOG.md; echo; \
+              echo "Built by GitHub Actions from this tag. Check provenance with: gh attestation verify <file> --repo $GITHUB_REPOSITORY")

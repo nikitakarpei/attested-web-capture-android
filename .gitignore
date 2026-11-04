@@ -1,0 +1,7 @@
+build/
+.gradle/
+.kotlin/
+local.properties
+*.apk
+__pycache__/
+node_modules/
