@@ -188,7 +188,6 @@ jobs:
           KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
           STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           EXPECTED_CERT: ${{ vars.SIGNING_CERT_SHA256 }}
         run: |
           test -n "$EXPECTED_CERT"

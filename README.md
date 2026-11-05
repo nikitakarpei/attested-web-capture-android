@@ -95,7 +95,6 @@ only the signing step of the release job can read it. One-time setup:
    |---|---|
    | `SIGNING_KEYSTORE_B64` | output of `base64 -w0 release.jks` (macOS: `base64 -i release.jks`) |
    | `SIGNING_STORE_PASSWORD` | the keystore password |
-   | `SIGNING_KEY_PASSWORD` | the key password (the same, for the default keystore type) |
    | `SIGNING_KEY_ALIAS` | `release` |
 
 4. **Add the variable** `SIGNING_CERT_SHA256`, the certificate's fingerprint. Get it with:
