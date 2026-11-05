@@ -120,6 +120,23 @@ jobs:
           sha256sum dist/*.apk
           echo "$version" > dist/VERSION
 
+      # The release job's signing (tools/sign.sh), with a throwaway key: what breaks it fails here, not at a release.
+      - name: Check signing, with a throwaway key
+        env:
+          STORE_PASSWORD: throwaway
+        run: |
+          keystore="$RUNNER_TEMP/throwaway.jks"
+          keytool -genkeypair -keystore "$keystore" -alias throwaway -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=throwaway" -storepass:env STORE_PASSWORD
+          keytool -exportcert -keystore "$keystore" -alias throwaway -storepass:env STORE_PASSWORD \
+            -file "$RUNNER_TEMP/throwaway.der"
+          cert=$(sha256sum "$RUNNER_TEMP/throwaway.der" | cut -d' ' -f1)
+          EXPECTED_CERT=$cert tools/sign.sh "$keystore" throwaway "$UNSIGNED_APK" "$RUNNER_TEMP/signed.apk"
+          # Another expected certificate must stop it.
+          if EXPECTED_CERT=$(printf '%064d' 0) tools/sign.sh "$keystore" throwaway "$UNSIGNED_APK" "$RUNNER_TEMP/x.apk"; then
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: apk
@@ -164,37 +181,22 @@ jobs:
           packages: build-tools;37.0.0
           cache: false
 
-      - name: Use apksigner
-        run: echo "APKSIGNER=$ANDROID_HOME/build-tools/37.0.0/apksigner" >> "$GITHUB_ENV"
-
-      # Passwords go through environment variables, never the command line.
+      # Passwords go through environment variables, never the command line. Nothing is signed unless the key's
+      # certificate is the published SIGNING_CERT_SHA256, and the signed APK must have exactly that certificate.
       - name: Sign
         env:
           KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
           STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          EXPECTED_CERT: ${{ vars.SIGNING_CERT_SHA256 }}
         run: |
+          test -n "$EXPECTED_CERT"
           umask 077
           keystore="$RUNNER_TEMP/release.jks"
           trap 'rm -f "$keystore"' EXIT
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$keystore"
-          # v3 allows rotating to a new key later; v1 (JAR) would add files, and Android 9+ doesn't need it.
-          "$APKSIGNER" sign --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass env:STORE_PASSWORD --key-pass env:KEY_PASSWORD \
-            --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false \
-            --out "dist/attested-web-capture-$VERSION.apk" "dist/attested-web-capture-$VERSION-unsigned.apk"
-
-      # Fails if the secrets hold a different key than the published SIGNING_CERT_SHA256.
-      - name: Check the signature and the signing certificate
-        env:
-          EXPECTED_CERT: ${{ vars.SIGNING_CERT_SHA256 }}
-        run: |
-          out=$("$APKSIGNER" verify --print-certs "dist/attested-web-capture-$VERSION.apk")
-          echo "$out"
-          test -n "$EXPECTED_CERT"
-          echo "$out" | grep -qx "Signer #1 certificate SHA-256 digest: $EXPECTED_CERT"
-          test "$(echo "$out" | grep -c '^Signer #[0-9]* certificate DN:')" = 1   # exactly one signer
+          tools/sign.sh "$keystore" "$KEY_ALIAS" "dist/attested-web-capture-$VERSION-unsigned.apk" \
+            "dist/attested-web-capture-$VERSION.apk"
 
       - name: Checksums
         run: (cd dist && sha256sum ./*.apk > SHA256SUMS && cat SHA256SUMS)
