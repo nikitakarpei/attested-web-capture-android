@@ -1,13 +1,12 @@
 #!/bin/sh
-# Signs the unsigned release APK, and checks the signed APK has exactly the keystore's certificate. CI's release job
-# signs releases with it, and every build checks it with a throwaway key; locally, it signs your own build to install.
+# Signs an APK, and checks the signed APK has exactly the keystore's certificate.
 #
 #   tools/sign.sh <keystore> <key alias> [unsigned apk] [signed apk]
 #
-# STORE_PASSWORD (asked for if unset) and KEY_PASSWORD (default: the same) come from the environment, never the
-# command line. If EXPECTED_CERT is set, the keystore's certificate must have that SHA-256, or nothing is signed.
-# Prints the certificate's SHA-256 (what verifiers put in signingCertificates). Needs ANDROID_HOME (build-tools
-# 37.0.0 installed) and a JDK's keytool.
+# The APKs default to the release build's. STORE_PASSWORD (asked for if unset) and KEY_PASSWORD (default: the same)
+# come from the environment, never the command line. If EXPECTED_CERT is set, the keystore's certificate must have
+# that SHA-256, or nothing is signed. Prints the certificate's SHA-256. Needs ANDROID_HOME (build-tools 37.0.0
+# installed) and a JDK's keytool.
 set -eu
 keystore=$1
 alias=$2
