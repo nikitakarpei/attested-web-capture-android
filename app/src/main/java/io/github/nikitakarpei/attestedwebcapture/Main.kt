@@ -783,25 +783,18 @@ class MainActivity : Activity() {
 
         text("Attested Web Capture", 20f).setTypeface(null, Typeface.BOLD)
         val cellular = cellularAddresses(this)
-        val urls = NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }
+        val hosts = NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }
             .filter { !it.isLoopbackAddress && !it.isLinkLocalAddress && answersOn(it, cellular) }
-            .map { a ->
-                val host = if (a.address.size == 16) "[${a.hostAddress?.substringBefore('%')}]" else a.hostAddress
-                "http://:${token(this)}@$host:$PORT"
-            }
-        fun url(url: String) = text(url, 14f).apply {
-            typeface = Typeface.MONOSPACE
-            setOnClickListener { copy(url) }
-        }
-        if (urls.isEmpty()) {
-            text("Not reachable from other devices: connect to Wi-Fi, start a hotspot or a VPN.")
-        } else {
-            text("Proxy (tap to copy)", 13f)
-            urls.forEach { url(it) }
-        }
+            .map { a -> if (a.address.size == 16) "[${a.hostAddress?.substringBefore('%')}]" else a.hostAddress }
+        text("Proxy (tap to copy)", 13f)
         // Loopback always answers: for apps on this phone, or a computer through `adb forward`.
-        text("From this phone (tap to copy)", 13f)
-        url("http://:${token(this)}@127.0.0.1:$PORT")
+        for (url in (hosts + "127.0.0.1").map { "http://:${token(this)}@$it:$PORT" }) {
+            text(url, 14f).apply {
+                typeface = Typeface.MONOSPACE
+                setOnClickListener { copy(url) }
+            }
+        }
+        if (hosts.isEmpty()) text("Not reachable from other devices: connect to Wi-Fi, start a hotspot or a VPN.")
         val k = Keys.current
         if (k == null) {
             text("Signing key not ready: captures return 503 until it is.")
@@ -818,7 +811,7 @@ class MainActivity : Activity() {
             }
         }
         if (batteryOptimized()) {
-            button("Allow running in background (otherwise the proxy may stop answering while the screen is off)") {
+            button("Allow running in background") {
                 requestBatteryExemption()
             }
         }
