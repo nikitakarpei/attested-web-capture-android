@@ -789,17 +789,19 @@ class MainActivity : Activity() {
                 val host = if (a.address.size == 16) "[${a.hostAddress?.substringBefore('%')}]" else a.hostAddress
                 "http://:${token(this)}@$host:$PORT"
             }
+        fun url(url: String) = text(url, 14f).apply {
+            typeface = Typeface.MONOSPACE
+            setOnClickListener { copy(url) }
+        }
         if (urls.isEmpty()) {
-            text("Not reachable: connect to Wi-Fi, start a hotspot or a VPN.")
+            text("Not reachable from other devices: connect to Wi-Fi, start a hotspot or a VPN.")
         } else {
             text("Proxy (tap to copy)", 13f)
-            for (url in urls) {
-                text(url, 14f).apply {
-                    typeface = Typeface.MONOSPACE
-                    setOnClickListener { copy(url) }
-                }
-            }
+            urls.forEach { url(it) }
         }
+        // Loopback always answers: for apps on this phone, or a computer through `adb forward`.
+        text("From this phone (tap to copy)", 13f)
+        url("http://:${token(this)}@127.0.0.1:$PORT")
         val k = Keys.current
         if (k == null) {
             text("Signing key not ready: captures return 503 until it is.")

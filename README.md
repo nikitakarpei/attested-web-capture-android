@@ -28,6 +28,9 @@ hardware certifies the key, including which app made it and whether the OS was v
    - Keep `-i` and save with `>` so the file stays byte-exact.
 3. To stop, tap **Stop proxy and close**.
 
+The screen also shows a `127.0.0.1` address, which works without any network: for apps on the phone itself,
+or a computer connected over USB after `adb forward tcp:8787 tcp:8787`.
+
 The proxy only answers on local networks (Wi-Fi, hotspot, VPN), never on mobile data. The password travels
 unencrypted on that network, so use one you trust, or a VPN.
 
