@@ -3,7 +3,7 @@
 Each release has a section `## <version> (<date>)`, used as its release notes. Versions follow
 [Semantic Versioning](https://semver.org/).
 
-## 0.1.1 (2026-11-07)
+## 0.2.0 (2026-11-07)
 
 - The screen also shows the proxy's `127.0.0.1` address, for apps on the phone or `adb forward`.
 
